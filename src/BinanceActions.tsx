@@ -10,38 +10,31 @@ interface Balance {
 const BinanceActions: React.FC = () => {
     const [balance, setBalance] = useState<Balance[]>([]);
     const [message, setMessage] = useState<string>('');
+    const [coin, setCoin] = useState<string>('BTC');
+    const [quantity, setQuantity] = useState<number>(0);
 
     const backendURL: string = 'http://localhost:5000';
     const socket = io(backendURL);
 
     useEffect(() => {
-        socket.on('balance update', (newBalance: Balance[]) => {
-            setBalance(newBalance);
-            setMessage('Balance updated');
+        socket.on('connect', () => {
+            console.log('Connected to backend');
         });
-
-        socket.on('bitcoin purchase', () => {
-            setMessage('Bitcoin purchase update received');
-            getBalance();
+        socket.on('disconnect', () => {
+            console.log('Disconnected from backend');
         });
-
-        socket.on('ethereum purchase', () => {
-            setMessage('Ethereum purchase update received');
-            getBalance();
+        socket.on('coin purchase', (data: any) => {
+            setMessage(`Purchased ${data.coin}`);
+            getBalance(); // To update the balance after purchase
         });
-
-        socket.on('coin sale', () => {
-            setMessage('Coin sale update received');
-            getBalance();
+    
+        socket.on('coin sale', (data: any) => {
+            setMessage(`Sold ${data.coin}`);
+            getBalance(); // To update the balance after sale
         });
-
-        // Clean up the socket connection when the component unmounts
-        return () => {
-            socket.off('balance update');
-            socket.off('bitcoin purchase');
-            socket.off('ethereum purchase');
-            socket.off('coin sale');
-        };
+        socket.on('message', (message: string) => {
+            setMessage(message);
+        });
     }, []);
 
     const getBalance = () => {
@@ -55,43 +48,37 @@ const BinanceActions: React.FC = () => {
             });
     };
 
-    const buyBitcoin = () => {
-        axios.post(`${backendURL}/buy-bitcoin`)
+    const buyCoin = (coin: string) => {
+        axios.post(`${backendURL}/buy`, { coin, quantity: quantity })
             .then(response => {
-                setMessage('Bought Bitcoin successfully');
+                setMessage(`Bought ${quantity} ${coin} successfully`);
             })
             .catch(error => {
-                setMessage('Error buying Bitcoin');
+                const errorMessage = error.response && error.response.data && error.response.data.error 
+                    ? error.response.data.error 
+                    : 'Error buying coin';
+                setMessage(errorMessage);
             });
-    };
-
-    const buyEthereum = () => {
-        axios.post(`${backendURL}/buy-ethereum`)
-            .then(response => {
-                setMessage('Bought Ethereum successfully');
-            })
-            .catch(error => {
-                setMessage('Error buying Ethereum');
-            });
-    };
+    }
 
     const sellCoin = (coin: string) => {
-        axios.post(`${backendURL}/sell/${coin}`)
+        axios.post(`${backendURL}/sell`, { coin, quantity: quantity })
             .then(response => {
-                setMessage(`Sold ${coin} successfully`);
+                setMessage(`Sold ${quantity} ${coin} successfully`);
             })
             .catch(error => {
-                setMessage(`Error selling ${coin}`);
+                setMessage('Error selling coin');
             });
-    };
+    }
+    
 
     return (
         <div>
+            <input type="text" value={coin} onChange={(e) => setCoin(e.target.value.toUpperCase())}></input>
+            <input type="number" value={quantity} onChange={(e) => setQuantity(parseFloat(e.target.value))} />
             <button onClick={getBalance}>Get Balance</button>
-            <button onClick={buyBitcoin}>Buy 0.5 Bitcoin</button>
-            <button onClick={buyEthereum}>Buy 0.5 Ethereum</button>
-            <button onClick={() => sellCoin('BTC')}>Sell Bitcoin</button>
-            <button onClick={() => sellCoin('ETH')}>Sell Ethereum</button>
+            <button onClick={() => buyCoin(coin)}>Buy {coin}</button>
+            <button onClick={() => sellCoin(coin)}>Sell {coin}</button>
             
             <div>
                 <h2>Balance:</h2>
