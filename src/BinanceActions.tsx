@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 
@@ -8,95 +8,60 @@ interface Balance {
 }
 
 interface TransactionMessage {
-    coin: string;
-    amountInUSD: number;
+    baseAsset: string;
+    quoteAsset: string;
+    amount: number;
     quantity: number;
 }
 
-interface CoinOption {
+interface AssetOption {
     value: string;
     label: string;
+    baseAsset: string;
+    quoteAsset: string;
 }
 
 const BinanceActions: React.FC = () => {
     const [balance, setBalance] = useState<Balance[]>([]);
     const [message, setMessage] = useState<string>('');
-    const [coin, setCoin] = useState<string>('BTC');
+    const [asset, setAsset] = useState<string>('');
     const [quantity, setQuantity] = useState<number>(0);
     const [usdtBalance, setUsdtBalance] = useState<string>('$0');
     const [transactionMessage, setTransactionMessage] = useState<string>('');
-    const [coins, setCoins] = useState<CoinOption[]>([]);
-    
-    const backendURL: string = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+    const [assets, setAssets] = useState<AssetOption[]>([]); 
+    const [selectedSymbol, setSelectedSymbol] = useState<{ baseAsset: string, quoteAsset: string }>({ baseAsset: '', quoteAsset: '' });
+
+    const backendURL: string = process.env.REACT_APP_BACKEND_URL || '';
     const socketRef = React.useRef<Socket>();
 
-    const fetchCoins = async () => {
+    const fetchAssets = async () => {
         try {
-            const response = await axios.get('https://api.binance.com/api/v3/exchangeInfo');
-            const coinOptions: CoinOption[] = response.data.symbols
+            const response = await axios.get(process.env.REACT_APP_EXCHANGE_INFO || '');
+            const assetOptions: AssetOption[] = response.data.symbols
                 .filter((symbol: any) => symbol.status === 'TRADING')
                 .map((symbol: any) => ({
                     label: `${symbol.baseAsset} (${symbol.symbol})`,
-                    value: symbol.baseAsset,
+                    value: symbol.symbol,
+                    baseAsset: symbol.baseAsset,
+                    quoteAsset: symbol.quoteAsset,
                 }));
-            setCoins(coinOptions);
-            if (coinOptions.length > 0) {
-                setCoin(coinOptions[0].value); // Default to the first coin if not already set
+            setAssets(assetOptions); 
+    
+            if (assetOptions.length > 0) {
+                const defaultAssetOption = assetOptions[3]; // BTCUSDT
+                setAsset(defaultAssetOption.value);
+                setSelectedSymbol({
+                    baseAsset: defaultAssetOption.baseAsset,
+                    quoteAsset: defaultAssetOption.quoteAsset
+                });
             }
         } catch (error) {
-            console.error('Failed to fetch coins:', error);
-            setMessage('Failed to fetch coin list');
+            console.error('Failed to fetch assets:', error);
+            setMessage('Failed to fetch asset list');
         }
     };
-
-    useEffect(() => {
-        if (!socketRef.current) {
-            socketRef.current = io(backendURL);
-        }
-
-        const socket = socketRef.current;
-
-        socket.on('connect', () => console.log('Connected to backend'));
-        socket.on('disconnect', () => console.log('Disconnected from backend'));
-        socket.on('coin purchase', (data: TransactionMessage) => {
-            const formattedAmount = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                maximumFractionDigits: 2
-            }).format(data.amountInUSD);
-
-            setTransactionMessage(`Bought ${data.quantity} ${data.coin} for ${formattedAmount}`);
-            getBalance();
-        });
-
-        socket.on('coin sale', (data: TransactionMessage) => {
-            const formattedAmount = new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                maximumFractionDigits: 2
-            }).format(data.amountInUSD);
-
-            setTransactionMessage(`Sold ${data.quantity} ${data.coin} for ${formattedAmount}`);
-            getBalance();
-        });
-
-        socket.on('message', (newMessage: string) => {
-            setMessage(newMessage);
-        });
-
-        fetchCoins();
-        getBalance();
-
-        return () => {
-            socket.off('connect');
-            socket.off('disconnect');
-            socket.off('coin purchase');
-            socket.off('coin sale'); 
-            socket.off('message');
-        };
-    }, [backendURL]); // socketRef.current is stable, does not need to be a dependency
-
-    const getBalance = () => {
+    
+    const getBalance = useCallback(() => {
         axios.get(`${backendURL}/api/balance`)
             .then(response => {
                 const balances: Balance[] = response.data;
@@ -111,46 +76,97 @@ const BinanceActions: React.FC = () => {
             .catch(error => {
                 setMessage(error.response?.data?.error || 'Error getting balance');
             });
-    };
+    }, [backendURL]);
 
-    const buyCoin = (selectedCoin: string) => {
-        setMessage(''); // Clear previous message
-        axios.post(`${backendURL}/api/buy`, { coin: selectedCoin, quantity })
-            .then(() => {
-                // Optionally handle success, e.g., clear the form or show a success message
-            })
-            .catch(error => {
-                setMessage(error.response?.data?.error || 'Error buying coin');
-            });
-    }
+    useEffect(() => {
+        if (!socketRef.current) {
+            socketRef.current = io(backendURL);
+        }
 
-    const sellCoin = (selectedCoin: string) => {
-        setMessage(''); // Clear previous message
-        axios.post(`${backendURL}/api/sell`, { coin: selectedCoin, quantity })
-            .then(() => {
-                // Optionally handle success
-            })
-            .catch(error => {
-                setMessage(error.response?.data?.error || 'Error selling coin');
-            });
-    }
+        const socket = socketRef.current;
+
+        socket.on('connect', () => console.log('Connected to backend'));
+        socket.on('disconnect', () => console.log('Disconnected from backend'));
+        socket.on('asset purchase', (data: TransactionMessage) => {        
+            setTransactionMessage(`Bought ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
+            getBalance();
+        });
+
+        socket.on('asset sale', (data: TransactionMessage) => {
     
+            setTransactionMessage(`Sold ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
+            getBalance();
+        });
+
+        socket.on('message', (newMessage: string) => {
+            setMessage(newMessage);
+        });
+
+        fetchAssets();
+        getBalance();
+
+        return () => {
+            socket.off('connect');
+            socket.off('disconnect');
+            socket.off('asset purchase');
+            socket.off('asset sale');
+            socket.off('message');
+        };
+    }, [backendURL]);
+
+    const buyAsset = () => {
+        setMessage('');
+        axios.post(`${backendURL}/api/buy`, {
+            baseAsset: selectedSymbol.baseAsset,
+            quoteAsset: selectedSymbol.quoteAsset,
+            quantity
+        })
+        .then(() => {
+            getBalance();
+        })
+        .catch(error => {
+            setMessage(error.response?.data?.error || 'Error buying asset');
+        });
+    }
+
+    const sellAsset = () => {
+        setMessage('');
+        axios.post(`${backendURL}/api/sell`, {
+            baseAsset: selectedSymbol.baseAsset,
+            quoteAsset: selectedSymbol.quoteAsset,
+            quantity
+        })
+        .then(() => {
+            getBalance();
+        })
+        .catch(error => {
+            setMessage(error.response?.data?.error || 'Error selling asset');
+        });
+    }
+
     return (
         <div>
             <h2>Account Balance: {usdtBalance}</h2>
             <p>{transactionMessage}</p>
             <p>{message}</p>
-            <select value={coin} onChange={(e) => setCoin(e.target.value)}>
-                {coins.map((coinOption) => (
-                    <option key={coinOption.value} value={coinOption.value}>
-                        {coinOption.label}
+            <select value={asset} onChange={(e) => {
+                const symbol = e.target.value;
+                const selectedOption = assets.find(assetOption => assetOption.value === symbol);
+                if (selectedOption) {
+                    setAsset(symbol);
+                    setSelectedSymbol({ baseAsset: selectedOption.baseAsset, quoteAsset: selectedOption.quoteAsset });
+                }
+            }}>
+                {assets.map((assetOption) => (
+                    <option key={assetOption.value} value={assetOption.value}>
+                        {assetOption.label}
                     </option>
                 ))}
             </select>
             <input type="number" value={quantity} onChange={(e) => setQuantity(parseFloat(e.target.value))} />
-            <button onClick={() => buyCoin(coin)}>Buy {coin}</button>
-            <button onClick={() => sellCoin(coin)}>Sell {coin}</button>
-    
+            <button onClick={() => buyAsset()}>Buy {asset}</button>
+            <button onClick={() => sellAsset()}>Sell {asset}</button>
+
             <div>
                 <h2>Portfolio:</h2>
                 {balance.map((bal, index) => (
@@ -159,7 +175,5 @@ const BinanceActions: React.FC = () => {
             </div>
         </div>
     );
-    
 };
-
 export default BinanceActions;
