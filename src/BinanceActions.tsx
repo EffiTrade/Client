@@ -82,25 +82,25 @@ const BinanceActions: React.FC = () => {
         if (!socketRef.current) {
             socketRef.current = io(backendURL);
         }
-
+    
         const socket = socketRef.current;
         socket.on('asset purchase', (data: TransactionMessage) => {        
             setTransactionMessage(`Bought ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
             getBalance();
         });
-
+    
         socket.on('asset sale', (data: TransactionMessage) => {
             setTransactionMessage(`Sold ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
             getBalance();
         });
-
+    
         socket.on('message', (newMessage: string) => {
             setMessage(newMessage);
         });
-
+    
         fetchAssets();
         getBalance();
-
+    
         return () => {
             socket.off('connect');
             socket.off('disconnect');
@@ -108,7 +108,8 @@ const BinanceActions: React.FC = () => {
             socket.off('asset sale');
             socket.off('message');
         };
-    }, [backendURL]);
+    }, [backendURL, getBalance]);
+    
 
     const buyAsset = () => {
         setMessage('');
