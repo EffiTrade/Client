@@ -84,16 +84,12 @@ const BinanceActions: React.FC = () => {
         }
 
         const socket = socketRef.current;
-
-        socket.on('connect', () => console.log('Connected to backend'));
-        socket.on('disconnect', () => console.log('Disconnected from backend'));
         socket.on('asset purchase', (data: TransactionMessage) => {        
             setTransactionMessage(`Bought ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
             getBalance();
         });
 
         socket.on('asset sale', (data: TransactionMessage) => {
-    
             setTransactionMessage(`Sold ${data.quantity} ${data.baseAsset} for ${data.amount} ${data.quoteAsset}`);
             getBalance();
         });
@@ -164,8 +160,8 @@ const BinanceActions: React.FC = () => {
                 ))}
             </select>
             <input type="number" value={quantity} onChange={(e) => setQuantity(parseFloat(e.target.value))} />
-            <button onClick={() => buyAsset()}>Buy {asset}</button>
-            <button onClick={() => sellAsset()}>Sell {asset}</button>
+            <button onClick={() => buyAsset()}>Buy: {asset}</button>
+            <button onClick={() => sellAsset()}>Sell: {asset}</button>
 
             <div>
                 <h2>Portfolio:</h2>
